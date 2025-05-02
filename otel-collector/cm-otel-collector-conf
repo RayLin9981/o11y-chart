@@ -1,0 +1,45 @@
+apiVersion: v1
+data:
+  otel-collector-config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: ${env:MY_POD_IP}:4317
+          http:
+            endpoint: ${env:MY_POD_IP}:4318
+    processors:
+      batch:
+      memory_limiter:
+        # 80% of maximum memory up to 2G
+        limit_mib: 1500
+        # 25% of limit up to 2G
+        spike_limit_mib: 512
+        check_interval: 5s
+    extensions:
+      zpages: {}
+    exporters:
+      otlp:
+        endpoint: "http://someotlp.target.com:4317" # Replace with a real endpoint.
+        tls:
+          insecure: true
+    service:
+      extensions: [zpages]
+      pipelines:
+        traces/1:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp]
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"otel-collector-config":"receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint: ${env:MY_POD_IP}:4317\n      http:\n        endpoint: ${env:MY_POD_IP}:4318\nprocessors:\n  batch:\n  memory_limiter:\n    # 80% of maximum memory up to 2G\n    limit_mib: 1500\n    # 25% of limit up to 2G\n    spike_limit_mib: 512\n    check_interval: 5s\nextensions:\n  zpages: {}\nexporters:\n  otlp:\n    endpoint: \"http://someotlp.target.com:4317\" # Replace with a real endpoint.\n    tls:\n      insecure: true\nservice:\n  extensions: [zpages]\n  pipelines:\n    traces/1:\n      receivers: [otlp]\n      processors: [memory_limiter, batch]\n      exporters: [otlp]\n"},"kind":"ConfigMap","metadata":{"annotations":{},"labels":{"app":"opentelemetry","component":"otel-collector-conf"},"name":"otel-collector-conf","namespace":"monitoring"}}
+  creationTimestamp: "2025-04-15T01:06:20Z"
+  labels:
+    app: opentelemetry
+    component: otel-collector-conf
+  name: otel-collector-conf
+  namespace: monitoring
+  resourceVersion: "1863131"
+  uid: 2bfbc349-12f0-47df-ab03-270cb54a46d0

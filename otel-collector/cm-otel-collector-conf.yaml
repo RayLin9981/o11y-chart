@@ -1,0 +1,46 @@
+apiVersion: v1
+data:
+  otel-collector-config: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: ${env:MY_POD_IP}:4317
+          http:
+            endpoint: ${env:MY_POD_IP}:4318
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: otel-collector
+              scrape_interval: 5s
+              static_configs:
+                - targets: [10.233.18.243:9400]
+    processors:
+      batch:
+      memory_limiter:
+        # 80% of maximum memory up to 2G
+        limit_mib: 1500
+        # 25% of limit up to 2G
+        spike_limit_mib: 512
+        check_interval: 5s
+    extensions:
+      zpages: {}
+    exporters:
+      otlp:
+        endpoint: "http://someotlp.target.com:4317" # Replace with a real endpoint.
+        tls:
+          insecure: true
+    service:
+      extensions: [zpages]
+      pipelines:
+        traces/1:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp]
+kind: ConfigMap
+metadata:
+  labels:
+    app: opentelemetry
+    component: otel-collector-conf
+  name: otel-collector-conf
+  namespace: monitoring

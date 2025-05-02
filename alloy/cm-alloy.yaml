@@ -1,0 +1,118 @@
+apiVersion: v1
+data:
+  config.alloy: |
+    local.file_match "local_files" {
+        path_targets = [{"__path__" = "/var/log/*.log"},{"__path__" = "/var/log/containers/*.log"}]
+        sync_period = "5s"
+    }
+    loki.source.file "log_scrape" {
+      targets    = local.file_match.local_files.targets
+      forward_to = [loki.process.filter_logs.receiver]
+      tail_from_end = true
+    }
+    loki.process "filter_logs" {
+      stage.drop {
+          source = ""
+          expression  = ".*Connection closed by authenticating user root"
+          drop_counter_reason = "noisy"
+        }
+      forward_to = [loki.write.grafana_loki.receiver]
+    }
+    loki.write "grafana_loki" {
+      endpoint {
+        url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+        tenant_id = "1"
+      }
+    }
+    logging {
+      level  = "info"
+      format = "logfmt"
+    }
+    
+    discovery.kubernetes "pods" {
+      role = "pod"
+    }
+    
+    discovery.kubernetes "nodes" {
+      role = "node"
+    }
+    
+    discovery.kubernetes "services" {
+      role = "service"
+    }
+    
+    discovery.kubernetes "endpoints" {
+      role = "endpoints"
+    }
+    
+    discovery.kubernetes "endpointslices" {
+      role = "endpointslice"
+    }
+    
+    discovery.kubernetes "ingresses" {
+      role = "ingress"
+    }
+    prometheus.remote_write "metrics_service" {
+        endpoint {
+            url = "http://mimir-nginx.mimir-test.svc.cluster.local/api/v1/push"
+    
+            // basic_auth {
+            //   username = "admin"
+            //   password = "admin"
+            // }
+        }
+    }
+
+
+    prometheus.exporter.unix "local_system" { }
+
+    prometheus.scrape "default_pod" {
+      targets    = discovery.kubernetes.pods.targets
+      forward_to = [prometheus.remote_write.metrics_service.receiver]
+    }
+    
+    prometheus.scrape "default_nodes" {
+      targets    = discovery.kubernetes.nodes.targets
+      forward_to = [prometheus.remote_write.metrics_service.receiver]
+    }
+    prometheus.scrape "default_services" {
+      targets    = discovery.kubernetes.services.targets
+      forward_to = [prometheus.remote_write.metrics_service.receiver]
+    }
+    prometheus.scrape "default_endpoints" {
+      targets    = discovery.kubernetes.endpoints.targets
+      forward_to = [prometheus.remote_write.metrics_service.receiver]
+    }
+    prometheus.scrape "default_ingresses" {
+      targets    = discovery.kubernetes.ingresses.targets
+      forward_to = [prometheus.remote_write.metrics_service.receiver]
+    }
+    prometheus.scrape "scrape_metrics" {
+      targets         = prometheus.exporter.unix.local_system.targets
+      forward_to      = [prometheus.relabel.filter_metrics.receiver]
+      scrape_interval = "10s"
+    }
+    prometheus.relabel "filter_metrics" {
+      rule {
+        action        = "drop"
+        source_labels = ["env"]
+        regex         = "dev"
+      }
+    
+      forward_to = [prometheus.remote_write.metrics_service.receiver]
+    }
+kind: ConfigMap
+metadata:
+  annotations:
+    meta.helm.sh/release-name: alloy
+    meta.helm.sh/release-namespace: monitoring
+  labels:
+    app.kubernetes.io/component: config
+    app.kubernetes.io/instance: alloy
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: alloy
+    app.kubernetes.io/version: v1.8.0
+    helm.sh/chart: alloy-1.0.0
+  name: alloy
+  namespace: monitoring
